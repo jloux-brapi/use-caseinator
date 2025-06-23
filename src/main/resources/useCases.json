@@ -1,0 +1,60 @@
+{
+  "BrApp Example Name" : {
+    "Import Trials": {
+      "servicesRequired" : [{
+        "serviceName": "trials",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }, {
+        "serviceName": "studies",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }
+      ]
+    },
+    "Import Germplasm": {
+      "servicesRequired" : [{
+        "serviceName": "pedigre",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }, {
+        "serviceName": "germplasm",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }
+      ]
+    }
+  },
+  "BrApp Example 2 Name" : {
+    "Import Observations": {
+      "servicesRequired" : [{
+        "serviceName": "observations",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }, {
+        "serviceName": "observationunits",
+        "methodsRequired": [
+          "GET",
+          "POST"
+        ],
+        "versionRequired": "2.1"
+      }
+      ]
+    }
+  }
+}
