@@ -1,4 +1,8 @@
-package org.brapi.useCaseChecker;
+package org.brapi.useCaseChecker.main;
+
+import org.brapi.useCaseChecker.UseCaseChecker;
+import org.brapi.useCaseChecker.UseCaseCheckerFactory;
+import org.brapi.useCaseChecker.exceptions.UseCaseCheckerException;
 
 public class Main {
     public static void main(String[] args) {
@@ -39,12 +43,16 @@ public class Main {
             System.exit(1);
         }
 
-        var useCaseChecker = new UseCaseChecker(baseUrl);
+        UseCaseChecker useCaseChecker = UseCaseCheckerFactory.getInstance().getUseCaseChecker(baseUrl);
 
-        if (all) {
-            System.out.println(useCaseChecker.allUseCasesCompliant(brAppName));
-        } else {
-            System.out.println(useCaseChecker.isUseCaseCompliant(brAppName, useCaseName));
+        try {
+            if (all) {
+                System.out.println(useCaseChecker.allUseCasesCompliant(brAppName));
+            } else {
+                System.out.println(useCaseChecker.isUseCaseCompliant(brAppName, useCaseName));
+            }
+        } catch (UseCaseCheckerException e) {
+            System.out.println(e.getMessage());
         }
     }
 }

@@ -3,95 +3,79 @@ package org.brapi.useCaseChecker;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import org.brapi.useCaseChecker.exceptions.UseCaseCheckerException;
 import org.brapi.useCaseChecker.model.Call;
-import org.brapi.useCaseChecker.model.ServiceRequired;
-import org.brapi.useCaseChecker.util.JsonNodeBodyHandler;
+import org.brapi.useCaseChecker.model.useCases.App;
+import org.brapi.useCaseChecker.model.useCases.ServiceRequired;
+import org.brapi.useCaseChecker.model.useCases.UseCase;
+import org.brapi.useCaseChecker.model.useCases.UseCases;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class UseCaseChecker {
 
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
+    private final OkHttpClient httpClient;
     private final String serverInfoUrl;
+    private final UseCases loadedUseCases;
+    private final ObjectMapper objectMapper;
+    private final static String SERVER_INFO_PATH = "/serverinfo";
 
-    private final static String SERVER_INFO_PATH = "/v2/serverinfo";
-
-    public UseCaseChecker(String serverBaseUrl) {
-        httpClient = HttpClient.newHttpClient();
-        objectMapper = new ObjectMapper();
+    UseCaseChecker(String serverBaseUrl,
+                          UseCases loadedUseCases,
+                          ObjectMapper objectMapper) {
+        httpClient = new OkHttpClient();
+        this.objectMapper = objectMapper;
         serverInfoUrl = serverBaseUrl + SERVER_INFO_PATH;
+        this.loadedUseCases = loadedUseCases;
     }
 
-    private List<Call> getServerInfoCalls() {
-        HttpResponse<JsonNode> response = null;
+    private List<Call> getServerInfoCalls() throws UseCaseCheckerException {
+        Response response;
 
-
+        JsonNode serverInfo = null;
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(new URI(serverInfoUrl))
-                    .GET()
+            Request request = new Request.Builder()
+                    .url(serverInfoUrl)
+                    .get()
                     .build();
 
+            response = httpClient.newCall(request).execute();
 
-            response = httpClient.send(request, new JsonNodeBodyHandler(objectMapper));
-        } catch (Exception e) {
+            if (response.body() != null) {
+                serverInfo = objectMapper.readTree(response.body().string());
+            }
+        } catch (IOException e) {
             // Add logging
-            System.out.println(e.getMessage());
+            throw new UseCaseCheckerException(e);
+        }
+
+        if (serverInfo == null) {
             return null;
         }
 
-        JsonNode serverInfo = objectMapper.valueToTree(response.body());
-
         return objectMapper.convertValue(serverInfo.path("result").path("calls"),
-                new TypeReference<>() {
+                new TypeReference<List<Call>>() {
                 });
     }
 
-    private JsonNode loadUseCases() {
-        InputStream is = getClass().getClassLoader().getResourceAsStream("useCases.json");
-
-        JsonNode useCases = null;
-
-        try {
-            useCases = objectMapper.readTree(is);
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
-        }
-
-        return useCases;
-    }
-
-    public boolean allUseCasesCompliant(String brAppName) {
+    public boolean allUseCasesCompliant(String brAppName) throws UseCaseCheckerException {
         List<Call> availableServiceCalls = getServerInfoCalls();
 
-        JsonNode useCases = loadUseCases();
+        Optional<App> app = loadedUseCases.getApps().stream()
+                .filter(a -> a.getAppName().equals(brAppName))
+                .findFirst();
 
-        var appUseCases = useCases.path(brAppName);
-
-        if (appUseCases == null || appUseCases.isEmpty()) {
-            System.out.printf("BrApp with name [%s] does not exist%n", brAppName);
-            return false;
-            // Return error
+        if (!app.isPresent()) {
+            throw new UseCaseCheckerException(String.format("BrApp with name [%s] does not exist%n", brAppName));
         }
 
-        Iterator<JsonNode> useCasesIter = appUseCases.elements();
-
-        while (useCasesIter.hasNext()) {
-            var appUseCase = useCasesIter.next();
-
-            List<ServiceRequired> servicesRequired = objectMapper.convertValue(appUseCase.path("servicesRequired"),
-                    new TypeReference<>() {
-                    });
+        for (UseCase appUseCase : app.get().getUseCases()) {
+            List<ServiceRequired> servicesRequired = appUseCase.getServicesRequired();
 
             if (!isUseCaseValid(servicesRequired, availableServiceCalls)) {
                 return false;
@@ -101,30 +85,27 @@ public class UseCaseChecker {
         return true;
     }
 
-    public boolean isUseCaseCompliant(String brAppName, String useCaseName) {
+    public boolean isUseCaseCompliant(String brAppName, String useCaseName) throws UseCaseCheckerException {
 
         List<Call> availableServiceCalls = getServerInfoCalls();
 
-        JsonNode useCases = loadUseCases();
+        Optional<App> app = loadedUseCases.getApps().stream()
+                .filter(a -> a.getAppName().equals(brAppName))
+                .findFirst();
 
-        var appUseCases = useCases.path(brAppName);
-
-        if (appUseCases == null || appUseCases.isEmpty()) {
-            System.out.printf("BrApp with name [%s] does not exist%n", brAppName);
-            return false;
-            // Return error
+        if (!app.isPresent()) {
+            throw new UseCaseCheckerException(String.format("BrApp with name [%s] does not exist%n", brAppName));
         }
 
-        var appUseCase = appUseCases.path(useCaseName);
+        Optional<UseCase> useCase = app.get().getUseCases().stream()
+                .filter(uc -> uc.getUseCaseName().equals(useCaseName))
+                .findFirst();
 
-        if (appUseCase == null || appUseCases.isEmpty()) {
-            System.out.printf("Use case with name [%s] does not exist for BrApp [%s]%n", useCaseName, brAppName);
-            return false;
+        if (!useCase.isPresent()) {
+            throw new UseCaseCheckerException(String.format("Use case with name [%s] does not exist for BrApp [%s]%n", useCaseName, brAppName));
         }
 
-        List<ServiceRequired> servicesRequired = objectMapper.convertValue(appUseCase.path("servicesRequired"),
-                new TypeReference<>() {
-                });
+        List<ServiceRequired> servicesRequired = useCase.get().getServicesRequired();
 
         return isUseCaseValid(servicesRequired, availableServiceCalls);
     }
@@ -144,7 +125,7 @@ public class UseCaseChecker {
                 return false;
             }
 
-            var call = candidates.getFirst();
+            Call call = candidates.get(0);
 
             if (!call.getVersions().contains(serviceRequired.getVersionRequired())) {
                 System.out.printf("Service [%s] did not have a compatible version in BrAPI compatible server with serverInfo endpoint: [%s]",
